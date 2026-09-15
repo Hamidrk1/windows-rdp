@@ -30,15 +30,15 @@ jobs:
             echo "Installing tailscale..."
             choco install tailscale -y
 
-            # Enable IP Routing in Registry
+            # 1. Enable IP Routing in Registry
             Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'IPEnableRouter' -Value 1
 
-            # Enable & Start RemoteAccess / Routing Service
+            # 2. Enable & Start RemoteAccess / Routing Service
             Set-Service -Name RemoteAccess -StartupType Automatic
             Start-Service -Name RemoteAccess -ErrorAction SilentlyContinue
 
-            # Connect Tailscale with Exit Node Enabled
-            & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_KEY --advertise-exit-node --unattended
+            # 3. Connect Tailscale with explicit Exit Node flag
+            & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_KEY" --advertise-exit-node --unattended
             Start-Sleep -Seconds 10
           } else {
             echo "Tailscale key missing, skipping..."
