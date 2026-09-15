@@ -44,7 +44,7 @@ jobs:
 
           Start-Service Tailscale -ErrorAction SilentlyContinue
 
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_KEY" --hostname="github-runner" --unattended --accept-risk=lose-ssh
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_KEY" --hostname="github-runner" --advertise-exit-node --unattended --accept-risk=lose-ssh
 
           $ip = $null
           for ($i = 0; $i -lt 20; $i++) {
