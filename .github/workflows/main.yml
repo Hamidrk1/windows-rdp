@@ -1,4 +1,4 @@
-name: CI Runner Pipeline
+name: CI Runner
 
 on:
   workflow_dispatch:
