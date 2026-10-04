@@ -1,4 +1,4 @@
-name: CI Runner Pipeline2
+name: CI Rdp-server
 
 on:
   workflow_dispatch:
