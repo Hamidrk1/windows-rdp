@@ -3,7 +3,6 @@ name: CI Runner2
 on:
   workflow_dispatch:
   schedule:
-  
     - cron: '0 */5 * * *'
 
 jobs:
@@ -18,12 +17,27 @@ jobs:
       - name: Configure RDP User
         run: |
           $User = "rwa"
-          $Password = ConvertTo-SecureString "Pass123456789!" -AsPlainText -Force
-          New-LocalUser $User -Password $Password -FullName "RDP User" -Description "RDP Admin User"
-          Add-LocalGroupMember -Group "Administrators" -Member $User
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User
+          $PasswordText = "Q350607p@"
+          
+          # ساخت یا آپدیت یوزر با پسورد صحیح
+          $ExistingUser = Get-LocalUser -Name $User -ErrorAction SilentlyContinue
+          if ($null -eq $ExistingUser) {
+              $SecurePassword = ConvertTo-SecureString $PasswordText -AsPlainText -Force
+              New-LocalUser $User -Password $SecurePassword -FullName "RDP User" -Description "RDP Admin User"
+          } else {
+              Set-LocalUser -Name $User -Password (ConvertTo-SecureString $PasswordText -AsPlainText -Force)
+          }
+
+          # عضویت در گروه‌های دسترسی ریموت و ادمین
+          Add-LocalGroupMember -Group "Administrators" -Member $User -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User -ErrorAction SilentlyContinue
+
+          # غیرفعال کردن Network Level Authentication (NLA) برای پذیرش بی‌دردسر پسورد
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Write-Output "RDP User configured successfully with correct password!"
 
       - name: Connect Mesh Network
         env:
@@ -49,7 +63,7 @@ jobs:
 
       - name: Keep Alive Loop
         run: |
-          $timeout = 350
+          $timeout = 290
           $elapsed = 0
           while ($elapsed -lt $timeout) {
             Write-Output "Session active... ($elapsed mins)"
