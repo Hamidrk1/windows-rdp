@@ -24,16 +24,11 @@ jobs:
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          if [ -z "$TS_KEY" ]; then
-            echo "Error: TAILSCALE_AUTHKEY secret is missing!"
-            exit 1
-          fi
-          
           echo "Installing Tailscale on Linux..."
           curl -fsSL https://tailscale.com/install.sh | sh
 
           echo "Connecting Tailscale..."
-          sudo tailscale up --authkey="${TS_KEY}" --hostname="github-runner-linux" --advertise-exit-node --accept-routes --unattended
+          sudo tailscale up --authkey="$TS_KEY" --hostname="github-runner-linux" --advertise-exit-node --accept-routes --unattended
           
           sleep 10
 
@@ -46,3 +41,4 @@ jobs:
             sleep 60
             elapsed=$((elapsed + 1))
           done
+          
