@@ -1,4 +1,4 @@
-name: 🐧 Linux Desktop (Web VNC) + Tailscale
+name: 🐧 Linux Desktop (Web VNC) + Onboard
 
 on:
   workflow_dispatch:
@@ -7,28 +7,28 @@ jobs:
   build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Desktop & noVNC
+      - name: Install Desktop, noVNC & Onboard
         run: |
           sudo apt-get update
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y xfce4 xfce4-goodies tightvncserver novnc websockify firefox
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y xfce4 xfce4-goodies tightvncserver novnc websockify onboard
           
           mkdir -p ~/.vnc
-          echo "123456" | vncpasswd -f > ~/.vnc/passwd
+          # حذف کامل رمز عبور برای اتصال سریع و بدون نیاز به پسورد
+          vncpasswd -f <<<' ' > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
           cat << 'EOF' > ~/.vnc/xstartup
           #!/bin/bash
           xrdb $HOME/.Xresources
           startxfce4 &
+          onboard &
           EOF
           chmod +x ~/.vnc/xstartup
 
-          vncserver :1 -geometry 1280x720 -depth 24
-          
-          # Run Web VNC on port 6080
+          vncserver :1 -geometry 1280x720 -depth 24 -SecurityTypes None
           websockify --web /usr/share/novnc/ 6080 localhost:5901 &
 
-      - name: Install and Connect Tailscale
+      - name: Connect Tailscale
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -41,7 +41,6 @@ jobs:
           timeout=290
           elapsed=0
           while [ $elapsed -lt $timeout ]; do
-            echo "Web VNC active..."
             sleep 60
             elapsed=$((elapsed + 1))
           done
