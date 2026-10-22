@@ -1,72 +1,69 @@
-name: CI Runner2
+name: Linux XFCE RDP & Tailscale
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-rdp-node
+  cancel-in-progress: false
 
 jobs:
-  build-and-run:
-    runs-on: windows-latest
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
     steps:
-      - name: Environment Setup
-        run: |
-          Set-ExecutionPolicy Unrestricted -Scope Process -Force
-          Write-Output "Initializing environment..."
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Configure RDP User
+      - name: Cache Environment
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache
+          key: ${{ runner.os }}-rdp-cache-${{ hashFiles('**/*.yml') }}
+
+      - name: Update & Install XFCE & XRDP
         run: |
-          $User = "rwa"
-          $PasswordText = "Q350607p@"
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xrdp
+          sudo systemctl enable xrdp
+
+      - name: Configure XRDP Session & User
+        run: |
+          sudo sed -i 's/port=3389/port=3389/g' /etc/xrdp/xrdp.ini
+          echo "startxfce4" > ~/.xsession
+          sudo chmod +x ~/.xsession
           
-          # ساخت یا آپدیت یوزر با پسورد صحیح
-          $ExistingUser = Get-LocalUser -Name $User -ErrorAction SilentlyContinue
-          if ($null -eq $ExistingUser) {
-              $SecurePassword = ConvertTo-SecureString $PasswordText -AsPlainText -Force
-              New-LocalUser $User -Password $SecurePassword -FullName "RDP User" -Description "RDP Admin User"
-          } else {
-              Set-LocalUser -Name $User -Password (ConvertTo-SecureString $PasswordText -AsPlainText -Force)
-          }
+          # ایجاد کاربر rwa با پسورد امن
+          RDP_PASS="${{ secrets.RDP_PASSWORD }}"
+          if [ -z "$RDP_PASS" ]; then
+            RDP_PASS="MyPass123456!!"
+          fi
+          sudo useradd -m -s /bin/bash rwa || true
+          echo "rwa:$RDP_PASS" | sudo chpasswd
+          sudo usermod -aG sudo rwa
 
-          # عضویت در گروه‌های دسترسی ریموت و ادمین
-          Add-LocalGroupMember -Group "Administrators" -Member $User -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User -ErrorAction SilentlyContinue
+      - name: Start XRDP Service
+        run: |
+          sudo systemctl restart xrdp
 
-          # غیرفعال کردن Network Level Authentication (NLA) برای پذیرش بی‌دردسر پسورد
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+      - name: Connect to Tailscale (Exit Node)
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          args: --advertise-exit-node --hostname=linux-rdp-node
+
+      - name: Keep-Alive Loop
+        run: |
+          echo "=========================================="
+          echo "Linux RDP & Tailscale Exit Node Ready!"
+          echo "Username: rwa"
+          tailscale ip -4
+          echo "=========================================="
           
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Write-Output "RDP User configured successfully with correct password!"
-
-      - name: Connect Mesh Network
-        env:
-          TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-        run: |
-          if ("$env:TS_KEY" -ne "") {
-            echo "Installing tailscale..."
-            choco install tailscale -y
-
-            # Enable IP Routing in Registry
-            Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' -Name 'IPEnableRouter' -Value 1
-
-            # Enable & Start RemoteAccess / Routing Service
-            Set-Service -Name RemoteAccess -StartupType Automatic
-            Start-Service -Name RemoteAccess -ErrorAction SilentlyContinue
-
-            # Connect Tailscale with explicit hostname and exit-node flag
-            & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$env:TS_KEY" --hostname="github-runner" --advertise-exit-node --unattended
-            Start-Sleep -Seconds 10
-          } else {
-            echo "Tailscale key missing, skipping..."
-          }
-
-      - name: Keep Alive Loop
-        run: |
-          $timeout = 290
-          $elapsed = 0
-          while ($elapsed -lt $timeout) {
-            Write-Output "Session active... ($elapsed mins)"
-            Start-Sleep -Seconds 60
-            $elapsed++
-          }
+          while true; do
+              sleep 300
+          done
