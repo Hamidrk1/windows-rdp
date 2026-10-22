@@ -11,20 +11,22 @@ jobs:
     steps:
       - name: Environment Setup
         run: |
-          echo "Updating packages..."
           sudo apt-get update
 
       - name: Install Desktop Environment & VNC
         run: |
-          echo "Installing XFCE Desktop and TightVNC..."
-          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y xfce4 xfce4-goodies tightvncserver dbus-x11
+          echo "Installing XFCE, TightVNC and Firefox..."
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y xfce4 xfce4-goodies tightvncserver dbus-x11 firefox
           
-          # Setup VNC configuration
+          # Kill any running vnc instances
+          vncserver -kill :1 || true
+          
+          # Setup VNC configuration with simple 6-char password
           mkdir -p ~/.vnc
-          echo "Pass1234!" | vncpasswd -f > ~/.vnc/passwd
+          echo "123456" | vncpasswd -f > ~/.vnc/passwd
           chmod 600 ~/.vnc/passwd
           
-          # Create startup script for XFCE
+          # Startup script for XFCE
           cat << 'EOF' > ~/.vnc/xstartup
           #!/bin/bash
           xrdb $HOME/.Xresources
@@ -32,7 +34,7 @@ jobs:
           EOF
           chmod +x ~/.vnc/xstartup
 
-          # Start VNC Server on port 5901 (:1)
+          # Start VNC Server
           vncserver :1 -geometry 1280x720 -depth 24
 
       - name: Enable IP Forwarding
@@ -45,12 +47,8 @@ jobs:
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          echo "Installing Tailscale..."
           curl -fsSL https://tailscale.com/install.sh | sh
-
-          echo "Connecting Tailscale..."
-          sudo tailscale up --authkey "$TS_KEY" --hostname "github-runner-linux" --advertise-exit-node --accept-routes --ssh
-          
+          sudo tailscale up --authkey "$TS_KEY" --hostname "github-runner-linux" --advertise-exit-node --accept-routes
           sleep 5
 
       - name: Keep Alive Loop
