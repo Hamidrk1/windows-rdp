@@ -1,58 +1,45 @@
-name: Linux XFCE RDP & Tailscale
+name: 🐧 Linux ExitNode - Auto 5H
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 */5 * * *'
-  workflow_dispatch:
-
-concurrency:
-  group: linux-rdp-node
-  cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Update & Install XFCE & XRDP
+      - name: Environment Setup
         run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xrdp
-          sudo systemctl enable xrdp
+          echo "Initializing Linux environment..."
+          sudo apt-get update
 
-      - name: Configure XRDP Session & User
+      - name: Enable IP Forwarding
         run: |
-          echo "startxfce4" > ~/.xsession
-          sudo chmod +x ~/.xsession
-          
-          RDP_PASS="${{ secrets.RDP_PASSWORD }}"
-          if [ -z "$RDP_PASS" ]; then
-            RDP_PASS="MyPass123456!!"
+          echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+          echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+          sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+
+      - name: Install and Connect Tailscale
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          if [ -n "$TS_KEY" ]; then
+            echo "Installing Tailscale on Linux..."
+            curl -fsSL https://tailscale.com/install.sh | sh
+            sudo tailscale up --authkey="$TS_KEY" --hostname="github-runner-linux" --advertise-exit-node --accept-routes --unattended
+            sleep 10
+          else
+            echo "Tailscale key missing, skipping..."
+            exit 1
           fi
-          sudo useradd -m -s /bin/bash rwa || true
-          echo "rwa:$RDP_PASS" | sudo chpasswd
-          sudo usermod -aG sudo rwa
 
-      - name: Start XRDP Service
+      - name: Keep Alive Loop
         run: |
-          sudo systemctl restart xrdp
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          version: latest
-          args: --advertise-exit-node --hostname=linux-rdp-node
-
-      - name: Keep-Alive Loop
-        run: |
-          echo "Linux RDP & Tailscale Exit Node Ready!"
-          while true; do
-              sleep 300
+          timeout=290
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            echo "Linux session active... ($elapsed mins)"
+            sleep 60
+            elapsed=$((elapsed + 1))
           done
