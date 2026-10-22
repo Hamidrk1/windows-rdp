@@ -18,12 +18,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Cache Environment
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache
-          key: ${{ runner.os }}-rdp-cache-${{ hashFiles('**/*.yml') }}
-
       - name: Update & Install XFCE & XRDP
         run: |
           sudo apt-get update -y
@@ -32,11 +26,9 @@ jobs:
 
       - name: Configure XRDP Session & User
         run: |
-          sudo sed -i 's/port=3389/port=3389/g' /etc/xrdp/xrdp.ini
           echo "startxfce4" > ~/.xsession
           sudo chmod +x ~/.xsession
           
-          # ایجاد کاربر rwa با پسورد امن
           RDP_PASS="${{ secrets.RDP_PASSWORD }}"
           if [ -z "$RDP_PASS" ]; then
             RDP_PASS="MyPass123456!!"
@@ -49,21 +41,18 @@ jobs:
         run: |
           sudo systemctl restart xrdp
 
-      - name: Connect to Tailscale (Exit Node)
-        uses: tailscale/github-action@v3
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
         with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           version: latest
           args: --advertise-exit-node --hostname=linux-rdp-node
 
       - name: Keep-Alive Loop
         run: |
-          echo "=========================================="
           echo "Linux RDP & Tailscale Exit Node Ready!"
-          echo "Username: rwa"
-          tailscale ip -4
-          echo "=========================================="
-          
           while true; do
               sleep 300
           done
